@@ -28,9 +28,9 @@ cat > php/Dockerfile <<EOF
 FROM wordpress:php8.1-fpm
 
 RUN apt-get update && apt-get install -y \\
-    libpng-dev libjpeg-dev libfreetype6-dev \\
-    libzip-dev zip unzip libonig-dev libxml2-dev \\
- && docker-php-ext-configure gd --with-freetype --with-jpeg \\
+    pkg-config libpng-dev libjpeg-dev libfreetype6-dev \\
+    libwebp-dev libzip-dev zip unzip libonig-dev libxml2-dev \\
+ && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \\
  && docker-php-ext-install gd mbstring zip mysqli pdo pdo_mysql xml curl
 
 RUN echo "upload_max_filesize=1024M" > /usr/local/etc/php/conf.d/uploads.ini && \\
@@ -39,7 +39,7 @@ RUN echo "upload_max_filesize=1024M" > /usr/local/etc/php/conf.d/uploads.ini && 
     echo "max_input_time=900" >> /usr/local/etc/php/conf.d/uploads.ini
 EOF
 
-echo "📄 创建 nginx 配置..."
+echo "📄 创建 nginx 配置 (仅 HTTP 阶段)..."
 cat > nginx/default.conf <<EOF
 server {
     listen 80;
@@ -48,23 +48,6 @@ server {
     location /.well-known/acme-challenge/ {
         root /var/www/html;
     }
-
-    location / {
-        return 301 https://\$host\$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl;
-    server_name $DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-
-    client_max_body_size 1024M;
-
-    root /var/www/html;
-    index index.php index.html;
 
     location / {
         try_files \$uri \$uri/ /index.php?\$args;
@@ -137,15 +120,47 @@ volumes:
   db_data:
 EOF
 
-echo "🚀 启动 Docker 容器并构建..."
+echo "🚀 构建容器（首次启动，仅 HTTP）..."
 docker-compose up -d --build
 
-sleep 10
+sleep 15
 
-echo "🔐 获取 SSL 证书（Let's Encrypt）..."
+echo "🔐 获取 SSL 证书..."
 docker-compose run --rm certbot
+
+echo "🔄 更新 nginx 配置为 HTTPS..."
+cat > nginx/default.conf <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name $DOMAIN;
+
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+
+    client_max_body_size 1024M;
+
+    root /var/www/html;
+    index index.php index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$args;
+    }
+
+    location ~ \.php\$ {
+        fastcgi_pass wordpress:9000;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/html\$fastcgi_script_name;
+    }
+}
+EOF
 
 echo "🔁 重启 nginx..."
 docker-compose restart nginx
 
-echo "✅ 安装完成！请访问 https://$DOMAIN"
+echo "✅ WordPress 已安装并启用 HTTPS，请访问: https://$DOMAIN"
