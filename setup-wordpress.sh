@@ -1,53 +1,35 @@
 #!/bin/bash
-set -e
 
-# WordPress Docker 一键部署脚本
-# 作者：free8lam（GitHub 用户名）
-# 请在执行前确认 DNS 已解析至服务器公网 IP
-
-# ====== 用户参数 ======
+# ====== 用户自定义信息 ======
 DOMAIN="x.golife.blog"
 EMAIL="free8lam@gmail.com"
-DB_ROOT_PASSWORD="Lmh8889998833"
 DB_NAME="free8lam"
 DB_USER="free8lam"
-DB_PASSWORD="Lmh888999**##"
-# ======================
+DB_PASS="Lmh888999**##"
+DB_ROOT_PASS="Lmh8889998833"
+# ============================
 
-# 安装 Docker & Docker Compose（如已安装会跳过）
 echo "📦 安装 Docker & Docker Compose..."
-if ! command -v docker &> /dev/null; then
-  sudo apt update
-  sudo apt install -y docker.io
-else
-  echo "✅ Docker 已安装"
-fi
+sudo apt update
+sudo apt install -y docker.io docker-compose unzip curl
 
-if ! command -v docker-compose &> /dev/null; then
-  sudo apt install -y docker-compose
-else
-  echo "✅ Docker Compose 已安装"
-fi
-
-# 创建目录结构
 echo "📁 创建目录 wordpress-docker..."
 mkdir -p wordpress-docker/{php,nginx,wp_data,nginx/ssl}
 cd wordpress-docker || exit 1
 
-# 下载 WordPress 中文版
-echo "⬇️ 下载 WordPress 中文版..."
+echo "⬇️ 下载 WordPress 英文版..."
 wget https://wordpress.org/latest.zip -O wordpress.zip
 unzip wordpress.zip
 mv wordpress/* wp_data/
 rm -rf wordpress wordpress.zip
 
-# 创建 PHP Dockerfile
+echo "📄 创建 PHP Dockerfile..."
 cat > php/Dockerfile <<EOF
 FROM wordpress:php8.1-fpm
 
 RUN apt-get update && apt-get install -y \\
     libpng-dev libjpeg-dev libfreetype6-dev \\
-    libzip-dev zip unzip libonig-dev \\
+    libzip-dev zip unzip libonig-dev libxml2-dev \\
  && docker-php-ext-configure gd --with-freetype --with-jpeg \\
  && docker-php-ext-install gd mbstring zip mysqli pdo pdo_mysql xml curl
 
@@ -57,7 +39,7 @@ RUN echo "upload_max_filesize=1024M" > /usr/local/etc/php/conf.d/uploads.ini && 
     echo "max_input_time=900" >> /usr/local/etc/php/conf.d/uploads.ini
 EOF
 
-# 创建 Nginx 配置
+echo "📄 创建 nginx 配置..."
 cat > nginx/default.conf <<EOF
 server {
     listen 80;
@@ -96,7 +78,7 @@ server {
 }
 EOF
 
-# 创建 docker-compose.yml
+echo "📄 创建 docker-compose.yml..."
 cat > docker-compose.yml <<EOF
 version: '3.8'
 
@@ -139,10 +121,10 @@ services:
     image: mysql:5.7
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: $DB_ROOT_PASSWORD
+      MYSQL_ROOT_PASSWORD: $DB_ROOT_PASS
       MYSQL_DATABASE: $DB_NAME
       MYSQL_USER: $DB_USER
-      MYSQL_PASSWORD: $DB_PASSWORD
+      MYSQL_PASSWORD: $DB_PASS
     volumes:
       - db_data:/var/lib/mysql
     networks:
@@ -155,19 +137,15 @@ volumes:
   db_data:
 EOF
 
-# 启动服务
-echo "🚀 启动 Docker 服务..."
+echo "🚀 启动 Docker 容器并构建..."
 docker-compose up -d --build
 
-# 等待容器稳定
 sleep 10
 
-# 获取 SSL 证书
-echo "🔐 获取 SSL 证书中..."
+echo "🔐 获取 SSL 证书（Let's Encrypt）..."
 docker-compose run --rm certbot
 
-# 重启 Nginx 加载新证书
-echo "🔁 重启 Nginx..."
+echo "🔁 重启 nginx..."
 docker-compose restart nginx
 
-echo "✅ WordPress 已成功部署，请访问：https://$DOMAIN"
+echo "✅ 安装完成！请访问 https://$DOMAIN"
