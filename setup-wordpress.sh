@@ -1,32 +1,47 @@
 #!/bin/bash
+set -e
 
 # WordPress Docker 一键部署脚本
-# 作者：你自己（GitHub 用户名）
-# 请在执行前修改 DOMAIN 和 EMAIL 变量
+# 作者：free8lam（GitHub 用户名）
+# 请在执行前确认 DNS 已解析至服务器公网 IP
 
-# ====== 用户需要修改的部分 ======
-DOMAIN="yourdomain.com"        # <<< 请修改：你的域名
-EMAIL="you@example.com"        # <<< 请修改：你的邮箱
-# =================================
+# ====== 用户参数 ======
+DOMAIN="x.golife.blog"
+EMAIL="free8lam@gmail.com"
+DB_ROOT_PASSWORD="Lmh8889998833"
+DB_NAME="free8lam"
+DB_USER="free8lam"
+DB_PASSWORD="Lmh888999**##"
+# ======================
 
-# 安装依赖
+# 安装 Docker & Docker Compose（如已安装会跳过）
 echo "📦 安装 Docker & Docker Compose..."
-sudo apt update
-sudo apt install -y docker.io docker-compose unzip curl
+if ! command -v docker &> /dev/null; then
+  sudo apt update
+  sudo apt install -y docker.io
+else
+  echo "✅ Docker 已安装"
+fi
+
+if ! command -v docker-compose &> /dev/null; then
+  sudo apt install -y docker-compose
+else
+  echo "✅ Docker Compose 已安装"
+fi
 
 # 创建目录结构
 echo "📁 创建目录 wordpress-docker..."
 mkdir -p wordpress-docker/{php,nginx,wp_data,nginx/ssl}
 cd wordpress-docker || exit 1
 
-# 下载中文 WordPress
+# 下载 WordPress 中文版
 echo "⬇️ 下载 WordPress 中文版..."
 wget https://cn.wordpress.org/latest-zh_CN.zip -O wordpress.zip
 unzip wordpress.zip
 mv wordpress/* wp_data/
 rm -rf wordpress wordpress.zip
 
-# 创建 Dockerfile（PHP 容器）
+# 创建 PHP Dockerfile
 cat > php/Dockerfile <<EOF
 FROM wordpress:php8.1-fpm
 
@@ -124,10 +139,10 @@ services:
     image: mysql:5.7
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD:rootpass
-      MYSQL_DATABASE:wp
-      MYSQL_USER:wpuser
-      MYSQL_PASSWORD:wppass
+      MYSQL_ROOT_PASSWORD: $DB_ROOT_PASSWORD
+      MYSQL_DATABASE: $DB_NAME
+      MYSQL_USER: $DB_USER
+      MYSQL_PASSWORD: $DB_PASSWORD
     volumes:
       - db_data:/var/lib/mysql
     networks:
@@ -144,14 +159,15 @@ EOF
 echo "🚀 启动 Docker 服务..."
 docker-compose up -d --build
 
+# 等待容器稳定
 sleep 10
 
 # 获取 SSL 证书
-echo "🔐 正在获取 SSL 证书..."
+echo "🔐 获取 SSL 证书中..."
 docker-compose run --rm certbot
 
-# 重启 nginx 加载证书
+# 重启 Nginx 加载新证书
 echo "🔁 重启 Nginx..."
 docker-compose restart nginx
 
-echo "✅ 安装完成！请访问 https://$DOMAIN"
+echo "✅ WordPress 已成功部署，请访问：https://$DOMAIN"
