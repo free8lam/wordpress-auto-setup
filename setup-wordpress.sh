@@ -36,7 +36,7 @@ cd wordpress-docker || exit 1
 
 # 下载 WordPress 中文版
 echo "⬇️ 下载 WordPress 中文版..."
-wget https://wordpress.org/latest.tar.gz -O wordpress.zip
+wget https://wordpress.org/latest.zip -O wordpress.zip
 unzip wordpress.zip
 mv wordpress/* wp_data/
 rm -rf wordpress wordpress.zip
